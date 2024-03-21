@@ -1,0 +1,17 @@
+{
+  "name": "astro-deploy-s3-cloudfront",
+  "version": "1.0.0",
+  "description": "A simple script to deploy astro websites to aws s3 and cloudfront",
+  "author": "NetBistrot",
+  "license": "MIT",
+  "private": false,
+  "devDependencies": {
+    "@aws-sdk/client-cloudfront": "^3.535.0",
+    "@aws-sdk/client-s3": "^3.537.0",
+    "@aws-sdk/lib-storage": "^3.537.0",
+    "async": "^3.2.5",
+    "klaw": "^4.1.0",
+    "mime": "^4.0.1",
+    "stream-to-promise": "^3.0.0"
+  }
+}
