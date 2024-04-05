@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+// This script is used to sync the local dist folder with the S3 bucket and then invalidate the CloudFront cache.
+// It is used to deploy the static site to AWS S3 and CloudFront.
+// The script is run using the following command: `node deploy.js`
+
+// The script uses the following libraries:
 const { S3Client, ListObjectsV2Command } = require("@aws-sdk/client-s3");
 const {
   CloudFrontClient,
@@ -19,6 +24,7 @@ const promisifiedParallelLimit = utilModule.promisify(
   asyncModule.parallelLimit
 );
 
+// The following variables are used to configure the script:
 const bucketName = "s3-bucket-name";
 
 const localFilesDir = "path-to-local-dist";
@@ -28,10 +34,16 @@ const cloudFrontDistributionId = "cloudfront-distribution-id";
 const s3Client = new S3Client({
   region: "us-west-2",
 });
+
+// defines the cloudfront client
 const cloudFrontClient = new CloudFrontClient({});
 
 console.log(`Retrieving bucket ${bucketName} info.`);
 
+/**
+ * List all objects in the bucket
+ * @returns {Promise<Array>}
+ **/
 const listAllObjects = async () => {
   const list = [];
 
@@ -48,6 +60,14 @@ const listAllObjects = async () => {
   return list;
 };
 
+/**
+ * Create a safe S3 key
+ * @param {string} key
+ * @returns {string}
+ * @example
+ * createSafeS3Key('path\\to\\file') // returns 'path/to/file'
+ * createSafeS3Key('path/to/file') // returns 'path/to/file'
+ **/
 const createSafeS3Key = (key) => {
   if (pathModule.sep === "\\") {
     return key.replace(/\\/g, "/");
@@ -55,13 +75,21 @@ const createSafeS3Key = (key) => {
   return key;
 };
 
+/**
+ * Start the process
+ **/
 const startProcess = async () => {
+  // An array of functions that upload files to S3
   const uploadQueue = [];
 
   const uploadFiles = ["/"];
 
   const objects = await listAllObjects();
 
+  /*
+    Create a map of keys to ETags
+    This is used to determine if an object has changed and needs to be uploaded
+  */
   const keyToETagMap = objects.reduce((acc, curr) => {
     if (curr.Key && curr.ETag) {
       acc[curr.Key] = curr.ETag;
@@ -69,12 +97,19 @@ const startProcess = async () => {
     return acc;
   }, {});
 
+  // The local directory to sync with S3
   const publicDir = pathModule.resolve(localFilesDir);
 
+  // A map of keys that are in use
   const isKeyInUse = {};
 
+  // Create a stream of all files in the public directory
   const stream = klaw(publicDir);
 
+  /*
+    For each file in the stream, check if the file is a file and if it is, check if the file has changed.
+    If the file has changed, upload the file to S3 and pushes it to uploadFiles array.
+  */
   stream.on("data", ({ path, stats }) => {
     if (!stats.isFile()) {
       return;
@@ -129,10 +164,14 @@ const startProcess = async () => {
     );
   });
 
+  // waits for the stream to finish
   await streamToPromiseModule(stream);
   await promisifiedParallelLimit(uploadQueue, 20);
   console.log("S3 Synced.");
 
+  /*
+   if there are uploadFiles, invalidate the CloudFront cache for each file
+  */
   if (uploadFiles.length > 1) {
     console.log("uploadFiles");
     console.log(uploadFiles);
